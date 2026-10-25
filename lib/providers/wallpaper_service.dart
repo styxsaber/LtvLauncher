@@ -74,6 +74,7 @@ class WallpaperService extends ChangeNotifier {
   bool _lastRedditEnabled = false;
   String _lastRedditSubreddits = "";
   bool _lastRedditAllowNsfw = false;
+  bool _lastRedditNsfwOnly = false;
 
   void _onSettingsChanged() {
     if (!_initialized) {
@@ -90,12 +91,16 @@ class WallpaperService extends ChangeNotifier {
     final redditEnabled = _settingsService.redditWallpaperEnabled;
     final redditSubreddits = _settingsService.redditWallpaperSubreddits;
     final redditAllowNsfw = _settingsService.redditWallpaperAllowNsfw;
+    final redditNsfwOnly = _settingsService.redditWallpaperNsfwOnly;
     final redditToggled = redditEnabled != _lastRedditEnabled;
-    final redditSourceChanged = redditSubreddits != _lastRedditSubreddits || redditAllowNsfw != _lastRedditAllowNsfw;
+    final redditSourceChanged = redditSubreddits != _lastRedditSubreddits ||
+        redditAllowNsfw != _lastRedditAllowNsfw ||
+        redditNsfwOnly != _lastRedditNsfwOnly;
     if (redditToggled || redditSourceChanged) {
       _lastRedditEnabled = redditEnabled;
       _lastRedditSubreddits = redditSubreddits;
       _lastRedditAllowNsfw = redditAllowNsfw;
+      _lastRedditNsfwOnly = redditNsfwOnly;
       _updateRedditTimerState();
       // Show the cached Reddit picture (or switch back) right away ...
       _updateWallpaper(force: true);
@@ -125,6 +130,7 @@ class WallpaperService extends ChangeNotifier {
     _lastRedditEnabled = _settingsService.redditWallpaperEnabled;
     _lastRedditSubreddits = _settingsService.redditWallpaperSubreddits;
     _lastRedditAllowNsfw = _settingsService.redditWallpaperAllowNsfw;
+    _lastRedditNsfwOnly = _settingsService.redditWallpaperNsfwOnly;
     _initialized = true;
 
     await _updateWallpaper();
@@ -222,6 +228,7 @@ class WallpaperService extends ChangeNotifier {
         subreddits: _settingsService.redditWallpaperSubreddits,
         target: _wallpaperRedditFile,
         allowNsfw: _settingsService.redditWallpaperAllowNsfw,
+        nsfwOnly: _settingsService.redditWallpaperNsfwOnly,
         excludeId: _lastRedditPostId,
       );
       _lastRedditPostId = picked.id;

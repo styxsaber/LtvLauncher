@@ -21,6 +21,7 @@ import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/providers/wallpaper_service.dart';
 import 'package:flauncher/widgets/rounded_switch_list_tile.dart';
 import 'package:flauncher/widgets/settings/focusable_settings_tile.dart';
+import 'package:flauncher/widgets/settings/subreddit_picker_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -83,6 +84,14 @@ class RedditWallpaperPanelPage extends StatelessWidget {
             onChanged: (value) => settings.setRedditWallpaperAllowNsfw(value),
           ),
         ),
+        Consumer<SettingsService>(
+          builder: (_, settings, __) => RoundedSwitchListTile(
+            title: Text(Localizations.localeOf(context).languageCode == 'de' ? "Nur NSFW-Bilder" : "NSFW only"),
+            secondary: const Icon(Icons.explicit),
+            value: settings.redditWallpaperNsfwOnly,
+            onChanged: (value) => settings.setRedditWallpaperNsfwOnly(value),
+          ),
+        ),
         Consumer2<SettingsService, WallpaperService>(
           builder: (_, settings, wallpaperService, __) => FocusableSettingsTile(
             leading: wallpaperService.redditRefreshing
@@ -123,7 +132,7 @@ class RedditWallpaperPanelPage extends StatelessWidget {
   Future<void> _editSubreddits(BuildContext context, SettingsService settings, AppLocalizations localizations) async {
     final result = await showDialog<String>(
       context: context,
-      builder: (_) => _SubredditsDialog(initialValue: settings.redditWallpaperSubreddits.replaceAll('+', ', ')),
+      builder: (_) => SubredditPickerDialog(initial: settings.redditWallpaperSubreddits.replaceAll('+', ', ')),
     );
     if (result == null) {
       return;

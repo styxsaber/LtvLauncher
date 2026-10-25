@@ -67,6 +67,7 @@ const String _redditWallpaperEnabledKey = "reddit_wallpaper_enabled";
 const String _redditWallpaperSubredditsKey = "reddit_wallpaper_subreddits";
 const String _redditWallpaperIntervalMinutesKey = "reddit_wallpaper_interval_minutes";
 const String _redditWallpaperAllowNsfwKey = "reddit_wallpaper_allow_nsfw";
+const String _redditWallpaperNsfwOnlyKey = "reddit_wallpaper_nsfw_only";
 
 const String REDDIT_WALLPAPER_DEFAULT_SUBREDDITS = "EarthPorn+wallpapers";
 const int REDDIT_WALLPAPER_DEFAULT_INTERVAL_MINUTES = 360;
@@ -150,6 +151,7 @@ class SettingsService extends ChangeNotifier {
   late String _redditWallpaperSubreddits;
   late int _redditWallpaperIntervalMinutes;
   late bool _redditWallpaperAllowNsfw;
+  late bool _redditWallpaperNsfwOnly;
 
   bool get appHighlightAnimationEnabled => _appHighlightAnimationEnabled;
 
@@ -278,6 +280,7 @@ class SettingsService extends ChangeNotifier {
     _redditWallpaperIntervalMinutes =
         _sharedPreferences.getInt(_redditWallpaperIntervalMinutesKey) ?? REDDIT_WALLPAPER_DEFAULT_INTERVAL_MINUTES;
     _redditWallpaperAllowNsfw = _sharedPreferences.getBool(_redditWallpaperAllowNsfwKey) ?? false;
+    _redditWallpaperNsfwOnly = _sharedPreferences.getBool(_redditWallpaperNsfwOnlyKey) ?? false;
     notifyListeners();
   }
 
@@ -327,6 +330,7 @@ class SettingsService extends ChangeNotifier {
       _redditWallpaperSubredditsKey: _redditWallpaperSubreddits,
       _redditWallpaperIntervalMinutesKey: _redditWallpaperIntervalMinutes,
       _redditWallpaperAllowNsfwKey: _redditWallpaperAllowNsfw,
+      _redditWallpaperNsfwOnlyKey: _redditWallpaperNsfwOnly,
     };
   }
 
@@ -635,6 +639,7 @@ class SettingsService extends ChangeNotifier {
   String get redditWallpaperSubreddits => _redditWallpaperSubreddits;
   int get redditWallpaperIntervalMinutes => _redditWallpaperIntervalMinutes;
   bool get redditWallpaperAllowNsfw => _redditWallpaperAllowNsfw;
+  bool get redditWallpaperNsfwOnly => _redditWallpaperNsfwOnly;
 
   Future<void> setRedditWallpaperEnabled(bool enabled) async {
     if (_redditWallpaperEnabled == enabled) return;
@@ -655,9 +660,24 @@ class SettingsService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// "Allow NSFW" and "NSFW only" exclude each other: turning one on turns the other off.
   Future<void> setRedditWallpaperAllowNsfw(bool allow) async {
     await _sharedPreferences.setBool(_redditWallpaperAllowNsfwKey, allow);
     _redditWallpaperAllowNsfw = allow;
+    if (allow && _redditWallpaperNsfwOnly) {
+      await _sharedPreferences.setBool(_redditWallpaperNsfwOnlyKey, false);
+      _redditWallpaperNsfwOnly = false;
+    }
+    notifyListeners();
+  }
+
+  Future<void> setRedditWallpaperNsfwOnly(bool only) async {
+    await _sharedPreferences.setBool(_redditWallpaperNsfwOnlyKey, only);
+    _redditWallpaperNsfwOnly = only;
+    if (only && _redditWallpaperAllowNsfw) {
+      await _sharedPreferences.setBool(_redditWallpaperAllowNsfwKey, false);
+      _redditWallpaperAllowNsfw = false;
+    }
     notifyListeners();
   }
 }

@@ -44,11 +44,18 @@ class RedditImageCandidate {
   });
 }
 
-/// Picks a random landscape image from the top posts of one or more subreddits
-/// and downloads it to a local file. Uses only the public, unauthenticated
-/// `.json` listing of Reddit and `dart:io` (no extra dependencies).
+/// Picks a random landscape image from the monthly top list of Wallhaven
+/// (public API) and downloads it to a local file. Reddit switched off its
+/// unauthenticated .json access in 2026, so Wallhaven is used instead.
+/// The class keeps its old name so the rest of the app does not change;
+/// the "subreddits" setting now holds search terms such as "nature, space".
+/// NSFW images need a free Wallhaven API key in [_apiKey]; without one only
+/// SFW images are served.
 class RedditWallpaperFetcher {
   static const String _userAgent = 'android:com.leanbitlab.ltvl.wallpaper:v1.0 (by /u/styxsaber)';
+
+  /// Wallhaven API key (wallhaven.cc -> Settings -> Account). Only needed for NSFW.
+  static const String _apiKey = '';
   static const int _maxListingBytes = 4 * 1024 * 1024;
   static const int _maxImageBytes = 25 * 1024 * 1024;
   static const int _maxDownloadAttempts = 5;
@@ -82,14 +89,15 @@ class RedditWallpaperFetcher {
     required String subreddits,
     required File target,
     bool allowNsfw = false,
+    bool nsfwOnly = false,
     String? excludeId,
   }) async {
     final subs = parseSubreddits(subreddits);
     if (subs.isEmpty) {
-      throw const RedditWallpaperException('no valid subreddit');
+      throw const RedditWallpaperException('no valid search term');
     }
 
-    final candidates = await listCandidates(subs, allowNsfw: allowNsfw);
+    final candidates = await listCandidates(subs, allowNsfw: allowNsfw, nsfwOnly: nsfwOnly);
     if (candidates.isEmpty) {
       throw const RedditWallpaperException('no suitable images found');
     }
@@ -116,36 +124,44 @@ class RedditWallpaperFetcher {
     throw RedditWallpaperException('download failed: $lastError');
   }
 
-  Future<List<RedditImageCandidate>> listCandidates(List<String> subreddits, {bool allowNsfw = false}) async {
-    final dynamic json = await _fetchListing(subreddits);
+  /// Lists top images of the last month for one randomly chosen search term.
+  /// [allowNsfw] mixes SFW and NSFW, [nsfwOnly] returns NSFW only; both need [_apiKey].
+  Future<List<RedditImageCandidate>> listCandidates(List<String> subreddits,
+      {bool allowNsfw = false, bool nsfwOnly = false}) async {
+    if ((allowNsfw || nsfwOnly) && _apiKey.isEmpty) {
+      throw const RedditWallpaperException('NSFW needs a Wallhaven API key (see _apiKey in the fetcher)');
+    }
+    final term = subreddits[_random.nextInt(subreddits.length)];
+    final uri = Uri.https('wallhaven.cc', '/api/v1/search', {
+      'q': term,
+      'categories': '100',
+      'purity': nsfwOnly ? '001' : (allowNsfw ? '101' : '100'),
+      'sorting': 'toplist',
+      'topRange': '1M',
+      'atleast': '1920x1080',
+      'ratios': 'landscape',
+    });
+
+    final dynamic json = _decode(await _getString(uri));
     final dynamic data = json is Map ? json['data'] : null;
-    final dynamic children = data is Map ? data['children'] : null;
-    if (children is! List) {
-      throw const RedditWallpaperException('unexpected response from Reddit');
+    if (data is! List) {
+      throw const RedditWallpaperException('unexpected response from server');
     }
 
     final candidates = <RedditImageCandidate>[];
-    for (final child in children) {
-      final dynamic post = child is Map ? child['data'] : null;
-      if (post is! Map) continue;
-      if (post['is_video'] == true || post['stickied'] == true) continue;
-      if (post['over_18'] == true && !allowNsfw) continue;
-
-      final dynamic rawUrl = post['url_overridden_by_dest'] ?? post['url'];
-      if (rawUrl is! String) continue;
-      final url = Uri.tryParse(rawUrl);
+    for (final item in data) {
+      if (item is! Map) continue;
+      final dynamic path = item['path'];
+      if (path is! String) continue;
+      final url = Uri.tryParse(path);
       if (url == null || url.scheme != 'https' || url.host.isEmpty || !_imagePath.hasMatch(url.path)) continue;
 
-      final dynamic preview = post['preview'];
-      final dynamic images = preview is Map ? preview['images'] : null;
-      final dynamic first = (images is List && images.isNotEmpty) ? images.first : null;
-      final dynamic source = first is Map ? first['source'] : null;
-      final dynamic width = source is Map ? source['width'] : null;
-      final dynamic height = source is Map ? source['height'] : null;
-      if (width is! int || height is! int || height <= 0) continue;
+      final width = _toInt(item['dimension_x']);
+      final height = _toInt(item['dimension_y']);
+      if (width == null || height == null || height <= 0) continue;
       if (width < minWidth || width / height < minAspectRatio) continue;
 
-      final dynamic id = post['id'];
+      final dynamic id = item['id'];
       candidates.add(RedditImageCandidate(
         id: id is String ? id : url.toString(),
         url: url,
@@ -156,36 +172,20 @@ class RedditWallpaperFetcher {
     return candidates;
   }
 
-  static const List<String> _hosts = ['www.reddit.com', 'old.reddit.com'];
+  static int? _toInt(dynamic v) {
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v);
+    return null;
+  }
 
-  /// Downloads and parses the listing JSON, trying each Reddit host in turn.
-  /// If nothing works, the error message says what came back (HTTP status or the
-  /// start of a non-JSON answer) so problems can be diagnosed on the TV.
-  Future<dynamic> _fetchListing(List<String> subreddits) async {
-    final errors = <String>[];
-    for (final host in _hosts) {
-      final uri = Uri.https(
-        host,
-        '/r/${subreddits.join('+')}/top.json',
-        {'t': 'month', 'limit': '100', 'raw_json': '1'},
-      );
-      try {
-        final body = await _getString(uri);
-        try {
-          return jsonDecode(body);
-        } on FormatException {
-          final snippet = body.replaceAll(RegExp(r'\s+'), ' ').trim();
-          errors.add('$host: not JSON "${snippet.length > 70 ? snippet.substring(0, 70) : snippet}"');
-        }
-      } on RedditWallpaperException catch (e) {
-        errors.add('$host: ${e.message}');
-      } on IOException catch (e) {
-        errors.add('$host: $e');
-      } on TimeoutException {
-        errors.add('$host: timeout');
-      }
+  /// Parses JSON; on failure the error shows the start of what came back.
+  static dynamic _decode(String body) {
+    try {
+      return jsonDecode(body);
+    } on FormatException {
+      final snippet = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+      throw RedditWallpaperException('not JSON "${snippet.length > 70 ? snippet.substring(0, 70) : snippet}"');
     }
-    throw RedditWallpaperException(errors.join(' | '));
   }
 
   HttpClient _newClient() {
@@ -197,6 +197,9 @@ class RedditWallpaperFetcher {
   Future<HttpClientResponse> _open(HttpClient client, Uri uri, String accept) async {
     final request = await client.getUrl(uri).timeout(_timeout);
     request.headers.set(HttpHeaders.acceptHeader, accept);
+    if (_apiKey.isNotEmpty && uri.host == 'wallhaven.cc') {
+      request.headers.set('X-API-Key', _apiKey);
+    }
     final response = await request.close().timeout(_timeout);
     if (response.statusCode != HttpStatus.ok) {
       await response.drain<void>();
