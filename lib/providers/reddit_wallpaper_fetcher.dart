@@ -55,7 +55,7 @@ class RedditWallpaperFetcher {
   static const String _userAgent = 'android:com.leanbitlab.ltvl.wallpaper:v1.0 (by /u/styxsaber)';
 
   /// Wallhaven API key (wallhaven.cc -> Settings -> Account). Only needed for NSFW.
-  static const String _apiKey = '';
+  static const String _apiKey = '6LcMgQqJjkz4v3yPDiOvY8pd3wZQyRD4';
   static const int _maxListingBytes = 4 * 1024 * 1024;
   static const int _maxImageBytes = 25 * 1024 * 1024;
   static const int _maxDownloadAttempts = 5;
