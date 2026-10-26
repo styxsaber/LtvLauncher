@@ -63,6 +63,13 @@ const String _appLanguageKey = "app_language";
 const String _showWeatherInStatusBarKey = "show_weather_in_status_bar";
 const String _showWeatherWarningsKey = "show_weather_warnings";
 const String _temperatureUnitKey = "temperature_unit";
+const String _redditWallpaperEnabledKey = "reddit_wallpaper_enabled";
+const String _redditWallpaperSubredditsKey = "reddit_wallpaper_subreddits";
+const String _redditWallpaperIntervalMinutesKey = "reddit_wallpaper_interval_minutes";
+const String _redditWallpaperAllowNsfwKey = "reddit_wallpaper_allow_nsfw";
+
+const String REDDIT_WALLPAPER_DEFAULT_SUBREDDITS = "EarthPorn+wallpapers";
+const int REDDIT_WALLPAPER_DEFAULT_INTERVAL_MINUTES = 360;
 
 const String TEMPERATURE_UNIT_CELSIUS = "celsius";
 const String TEMPERATURE_UNIT_FAHRENHEIT = "fahrenheit";
@@ -139,6 +146,10 @@ class SettingsService extends ChangeNotifier {
   late bool _showWeatherInStatusBar;
   late bool _showWeatherWarnings;
   late String _temperatureUnit;
+  late bool _redditWallpaperEnabled;
+  late String _redditWallpaperSubreddits;
+  late int _redditWallpaperIntervalMinutes;
+  late bool _redditWallpaperAllowNsfw;
 
   bool get appHighlightAnimationEnabled => _appHighlightAnimationEnabled;
 
@@ -261,6 +272,12 @@ class SettingsService extends ChangeNotifier {
     _showWeatherInStatusBar = _sharedPreferences.getBool(_showWeatherInStatusBarKey) ?? false;
     _showWeatherWarnings = _sharedPreferences.getBool(_showWeatherWarningsKey) ?? true;
     _temperatureUnit = _sharedPreferences.getString(_temperatureUnitKey) ?? TEMPERATURE_UNIT_CELSIUS;
+    _redditWallpaperEnabled = _sharedPreferences.getBool(_redditWallpaperEnabledKey) ?? false;
+    _redditWallpaperSubreddits =
+        _sharedPreferences.getString(_redditWallpaperSubredditsKey) ?? REDDIT_WALLPAPER_DEFAULT_SUBREDDITS;
+    _redditWallpaperIntervalMinutes =
+        _sharedPreferences.getInt(_redditWallpaperIntervalMinutesKey) ?? REDDIT_WALLPAPER_DEFAULT_INTERVAL_MINUTES;
+    _redditWallpaperAllowNsfw = _sharedPreferences.getBool(_redditWallpaperAllowNsfwKey) ?? false;
     notifyListeners();
   }
 
@@ -306,6 +323,10 @@ class SettingsService extends ChangeNotifier {
       _showWeatherInStatusBarKey: _showWeatherInStatusBar,
       _showWeatherWarningsKey: _showWeatherWarnings,
       _temperatureUnitKey: _temperatureUnit,
+      _redditWallpaperEnabledKey: _redditWallpaperEnabled,
+      _redditWallpaperSubredditsKey: _redditWallpaperSubreddits,
+      _redditWallpaperIntervalMinutesKey: _redditWallpaperIntervalMinutes,
+      _redditWallpaperAllowNsfwKey: _redditWallpaperAllowNsfw,
     };
   }
 
@@ -607,6 +628,36 @@ class SettingsService extends ChangeNotifier {
   Future<void> setTemperatureUnit(String unit) async {
     await _sharedPreferences.setString(_temperatureUnitKey, unit);
     _temperatureUnit = unit;
+    notifyListeners();
+  }
+
+  bool get redditWallpaperEnabled => _redditWallpaperEnabled;
+  String get redditWallpaperSubreddits => _redditWallpaperSubreddits;
+  int get redditWallpaperIntervalMinutes => _redditWallpaperIntervalMinutes;
+  bool get redditWallpaperAllowNsfw => _redditWallpaperAllowNsfw;
+
+  Future<void> setRedditWallpaperEnabled(bool enabled) async {
+    if (_redditWallpaperEnabled == enabled) return;
+    await _sharedPreferences.setBool(_redditWallpaperEnabledKey, enabled);
+    _redditWallpaperEnabled = enabled;
+    notifyListeners();
+  }
+
+  Future<void> setRedditWallpaperSubreddits(String subreddits) async {
+    await _sharedPreferences.setString(_redditWallpaperSubredditsKey, subreddits);
+    _redditWallpaperSubreddits = subreddits;
+    notifyListeners();
+  }
+
+  Future<void> setRedditWallpaperIntervalMinutes(int minutes) async {
+    await _sharedPreferences.setInt(_redditWallpaperIntervalMinutesKey, minutes);
+    _redditWallpaperIntervalMinutes = minutes;
+    notifyListeners();
+  }
+
+  Future<void> setRedditWallpaperAllowNsfw(bool allow) async {
+    await _sharedPreferences.setBool(_redditWallpaperAllowNsfwKey, allow);
+    _redditWallpaperAllowNsfw = allow;
     notifyListeners();
   }
 }

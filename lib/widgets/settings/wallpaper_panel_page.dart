@@ -20,6 +20,7 @@ import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/providers/wallpaper_service.dart';
 import 'package:flauncher/widgets/settings/focusable_settings_tile.dart';
 import 'package:flauncher/widgets/settings/gradient_panel_page.dart';
+import 'package:flauncher/widgets/settings/reddit_wallpaper_panel_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flauncher/l10n/app_localizations.dart';
@@ -47,6 +48,11 @@ class WallpaperPanelPage extends StatelessWidget {
                 onChanged: (value) => settings.setTimeBasedWallpaperEnabled(value),
               );
             }
+          ),
+          FocusableSettingsTile(
+            leading: Icon(Icons.image_search),
+            title: Text(localizations.redditWallpaper, style: Theme.of(context).textTheme.bodyMedium),
+            onPressed: () => Navigator.of(context).pushNamed(RedditWallpaperPanelPage.routeName),
           ),
           Consumer<SettingsService>(
             builder: (_, settings, __) {
