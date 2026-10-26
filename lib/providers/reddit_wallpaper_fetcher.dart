@@ -48,7 +48,7 @@ class RedditImageCandidate {
 /// and downloads it to a local file. Uses only the public, unauthenticated
 /// `.json` listing of Reddit and `dart:io` (no extra dependencies).
 class RedditWallpaperFetcher {
-  static const String _userAgent = 'android:com.leanbitlab.ltvL:wallpaper (LTvLauncher)';
+  static const String _userAgent = 'android:com.leanbitlab.ltvl.wallpaper:v1.0 (by /u/styxsaber)';
   static const int _maxListingBytes = 4 * 1024 * 1024;
   static const int _maxImageBytes = 25 * 1024 * 1024;
   static const int _maxDownloadAttempts = 5;
@@ -117,13 +117,7 @@ class RedditWallpaperFetcher {
   }
 
   Future<List<RedditImageCandidate>> listCandidates(List<String> subreddits, {bool allowNsfw = false}) async {
-    final uri = Uri.https(
-      'www.reddit.com',
-      '/r/${subreddits.join('+')}/top.json',
-      {'t': 'month', 'limit': '100', 'raw_json': '1'},
-    );
-
-    final dynamic json = jsonDecode(await _getString(uri));
+    final dynamic json = await _fetchListing(subreddits);
     final dynamic data = json is Map ? json['data'] : null;
     final dynamic children = data is Map ? data['children'] : null;
     if (children is! List) {
@@ -162,6 +156,38 @@ class RedditWallpaperFetcher {
     return candidates;
   }
 
+  static const List<String> _hosts = ['www.reddit.com', 'old.reddit.com'];
+
+  /// Downloads and parses the listing JSON, trying each Reddit host in turn.
+  /// If nothing works, the error message says what came back (HTTP status or the
+  /// start of a non-JSON answer) so problems can be diagnosed on the TV.
+  Future<dynamic> _fetchListing(List<String> subreddits) async {
+    final errors = <String>[];
+    for (final host in _hosts) {
+      final uri = Uri.https(
+        host,
+        '/r/${subreddits.join('+')}/top.json',
+        {'t': 'month', 'limit': '100', 'raw_json': '1'},
+      );
+      try {
+        final body = await _getString(uri);
+        try {
+          return jsonDecode(body);
+        } on FormatException {
+          final snippet = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+          errors.add('$host: not JSON "${snippet.length > 70 ? snippet.substring(0, 70) : snippet}"');
+        }
+      } on RedditWallpaperException catch (e) {
+        errors.add('$host: ${e.message}');
+      } on IOException catch (e) {
+        errors.add('$host: $e');
+      } on TimeoutException {
+        errors.add('$host: timeout');
+      }
+    }
+    throw RedditWallpaperException(errors.join(' | '));
+  }
+
   HttpClient _newClient() {
     return HttpClient()
       ..connectionTimeout = _timeout
@@ -190,7 +216,7 @@ class RedditWallpaperFetcher {
           throw const RedditWallpaperException('response too large');
         }
       }
-      return utf8.decode(builder.takeBytes());
+      return utf8.decode(builder.takeBytes(), allowMalformed: true);
     } finally {
       client.close(force: true);
     }
