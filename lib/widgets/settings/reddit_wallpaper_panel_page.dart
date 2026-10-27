@@ -23,7 +23,6 @@ import 'package:flauncher/widgets/rounded_switch_list_tile.dart';
 import 'package:flauncher/widgets/settings/focusable_settings_tile.dart';
 import 'package:flauncher/widgets/settings/subreddit_picker_dialog.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 class RedditWallpaperPanelPage extends StatelessWidget {
@@ -37,15 +36,16 @@ class RedditWallpaperPanelPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
+    final de = Localizations.localeOf(context).languageCode == 'de';
 
     return Column(
       children: [
-        Text(localizations.redditWallpaper, style: Theme.of(context).textTheme.titleLarge),
+        Text("Wallhaven", style: Theme.of(context).textTheme.titleLarge),
         const Divider(),
         Consumer<SettingsService>(
           builder: (_, settings, __) => RoundedSwitchListTile(
             autofocus: true,
-            title: Text(localizations.redditWallpaper),
+            title: const Text("Wallhaven"),
             secondary: const Icon(Icons.image_search),
             value: settings.redditWallpaperEnabled,
             onChanged: (value) => _setEnabled(context, settings, value, localizations),
@@ -54,7 +54,7 @@ class RedditWallpaperPanelPage extends StatelessWidget {
         Consumer<SettingsService>(
           builder: (_, settings, __) => FocusableSettingsTile(
             leading: const Icon(Icons.forum_outlined),
-            title: Text(localizations.redditWallpaperSubreddits, style: Theme.of(context).textTheme.bodyMedium),
+            title: Text(de ? "Suchbegriffe" : "Search terms", style: Theme.of(context).textTheme.bodyMedium),
             trailing: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 120),
               child: Text(
@@ -78,7 +78,7 @@ class RedditWallpaperPanelPage extends StatelessWidget {
         ),
         Consumer<SettingsService>(
           builder: (_, settings, __) => RoundedSwitchListTile(
-            title: Text(localizations.redditWallpaperAllowNsfw),
+            title: Text(de ? "NSFW-Bilder erlauben" : "Allow NSFW images"),
             secondary: const Icon(Icons.explicit_outlined),
             value: settings.redditWallpaperAllowNsfw,
             onChanged: (value) => settings.setRedditWallpaperAllowNsfw(value),
@@ -86,7 +86,7 @@ class RedditWallpaperPanelPage extends StatelessWidget {
         ),
         Consumer<SettingsService>(
           builder: (_, settings, __) => RoundedSwitchListTile(
-            title: Text(Localizations.localeOf(context).languageCode == 'de' ? "Nur NSFW-Bilder" : "NSFW only"),
+            title: Text(de ? "Nur NSFW-Bilder" : "NSFW only"),
             secondary: const Icon(Icons.explicit),
             value: settings.redditWallpaperNsfwOnly,
             onChanged: (value) => settings.setRedditWallpaperNsfwOnly(value),
@@ -155,7 +155,7 @@ class RedditWallpaperPanelPage extends StatelessWidget {
       }
     }
     final wallpaperService = context.read<WallpaperService>();
-    final success = await wallpaperService.refreshRedditWallpaperNow();
+    final success = await wallpaperService.refreshRedditWallpaperNow(only: OnlineWallpaperSource.wallhaven);
     if (!success && context.mounted && wallpaperService.redditLastError != null) {
       _showMessage(context, "${localizations.redditWallpaperError} (${wallpaperService.redditLastError})");
     }
@@ -172,72 +172,6 @@ class RedditWallpaperPanelPage extends StatelessWidget {
             Expanded(child: Text(message)),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SubredditsDialog extends StatefulWidget {
-  final String initialValue;
-
-  const _SubredditsDialog({required this.initialValue});
-
-  @override
-  State<_SubredditsDialog> createState() => _SubredditsDialogState();
-}
-
-class _SubredditsDialogState extends State<_SubredditsDialog> {
-  late final FocusNode _focusNode;
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode = FocusNode();
-    _controller = TextEditingController(text: widget.initialValue);
-  }
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context)!;
-
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        if (_focusNode.hasFocus) {
-          _focusNode.unfocus();
-          SystemChannels.textInput.invokeMethod('TextInput.hide');
-        } else {
-          Navigator.of(context).pop();
-        }
-      },
-      child: SimpleDialog(
-        insetPadding: const EdgeInsets.only(bottom: 120),
-        contentPadding: const EdgeInsets.all(24),
-        title: Text(localizations.redditWallpaperSubreddits),
-        children: [
-          TextFormField(
-            focusNode: _focusNode,
-            autofocus: true,
-            controller: _controller,
-            decoration: InputDecoration(
-              labelText: localizations.redditWallpaperSubreddits,
-              hintText: localizations.redditWallpaperSubredditsHint,
-            ),
-            keyboardType: TextInputType.text,
-            textCapitalization: TextCapitalization.none,
-            autocorrect: false,
-            onFieldSubmitted: (value) => Navigator.of(context).pop(value),
-          ),
-        ],
       ),
     );
   }

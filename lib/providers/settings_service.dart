@@ -68,8 +68,13 @@ const String _redditWallpaperSubredditsKey = "reddit_wallpaper_subreddits";
 const String _redditWallpaperIntervalMinutesKey = "reddit_wallpaper_interval_minutes";
 const String _redditWallpaperAllowNsfwKey = "reddit_wallpaper_allow_nsfw";
 const String _redditWallpaperNsfwOnlyKey = "reddit_wallpaper_nsfw_only";
+const String _redditSourceEnabledKey = "reddit_source_enabled";
+const String _redditSourceSubredditsKey = "reddit_source_subreddits";
 
-const String REDDIT_WALLPAPER_DEFAULT_SUBREDDITS = "EarthPorn+wallpapers";
+// The "reddit_wallpaper_*" settings belong to the Wallhaven source (search terms, NSFW, ...).
+// The real Reddit source has its own "reddit_source_*" settings.
+const String REDDIT_WALLPAPER_DEFAULT_SUBREDDITS = "nature+landscape";
+const String REDDIT_SOURCE_DEFAULT_SUBREDDITS = "EarthPorn+wallpapers";
 const int REDDIT_WALLPAPER_DEFAULT_INTERVAL_MINUTES = 360;
 
 const String TEMPERATURE_UNIT_CELSIUS = "celsius";
@@ -152,6 +157,8 @@ class SettingsService extends ChangeNotifier {
   late int _redditWallpaperIntervalMinutes;
   late bool _redditWallpaperAllowNsfw;
   late bool _redditWallpaperNsfwOnly;
+  late bool _redditSourceEnabled;
+  late String _redditSourceSubreddits;
 
   bool get appHighlightAnimationEnabled => _appHighlightAnimationEnabled;
 
@@ -281,6 +288,9 @@ class SettingsService extends ChangeNotifier {
         _sharedPreferences.getInt(_redditWallpaperIntervalMinutesKey) ?? REDDIT_WALLPAPER_DEFAULT_INTERVAL_MINUTES;
     _redditWallpaperAllowNsfw = _sharedPreferences.getBool(_redditWallpaperAllowNsfwKey) ?? false;
     _redditWallpaperNsfwOnly = _sharedPreferences.getBool(_redditWallpaperNsfwOnlyKey) ?? false;
+    _redditSourceEnabled = _sharedPreferences.getBool(_redditSourceEnabledKey) ?? false;
+    _redditSourceSubreddits =
+        _sharedPreferences.getString(_redditSourceSubredditsKey) ?? REDDIT_SOURCE_DEFAULT_SUBREDDITS;
     notifyListeners();
   }
 
@@ -331,6 +341,8 @@ class SettingsService extends ChangeNotifier {
       _redditWallpaperIntervalMinutesKey: _redditWallpaperIntervalMinutes,
       _redditWallpaperAllowNsfwKey: _redditWallpaperAllowNsfw,
       _redditWallpaperNsfwOnlyKey: _redditWallpaperNsfwOnly,
+      _redditSourceEnabledKey: _redditSourceEnabled,
+      _redditSourceSubredditsKey: _redditSourceSubreddits,
     };
   }
 
@@ -640,6 +652,23 @@ class SettingsService extends ChangeNotifier {
   int get redditWallpaperIntervalMinutes => _redditWallpaperIntervalMinutes;
   bool get redditWallpaperAllowNsfw => _redditWallpaperAllowNsfw;
   bool get redditWallpaperNsfwOnly => _redditWallpaperNsfwOnly;
+
+  // Real Reddit source (second wallpaper source next to Wallhaven).
+  bool get redditSourceEnabled => _redditSourceEnabled;
+  String get redditSourceSubreddits => _redditSourceSubreddits;
+
+  Future<void> setRedditSourceEnabled(bool enabled) async {
+    if (_redditSourceEnabled == enabled) return;
+    await _sharedPreferences.setBool(_redditSourceEnabledKey, enabled);
+    _redditSourceEnabled = enabled;
+    notifyListeners();
+  }
+
+  Future<void> setRedditSourceSubreddits(String subreddits) async {
+    await _sharedPreferences.setString(_redditSourceSubredditsKey, subreddits);
+    _redditSourceSubreddits = subreddits;
+    notifyListeners();
+  }
 
   Future<void> setRedditWallpaperEnabled(bool enabled) async {
     if (_redditWallpaperEnabled == enabled) return;

@@ -34,9 +34,21 @@ const _keyRows = <String>[
 ];
 
 class SubredditPickerDialog extends StatefulWidget {
-  const SubredditPickerDialog({super.key, required this.initial});
+  const SubredditPickerDialog({
+    super.key,
+    required this.initial,
+    this.title = 'Suchbegriffe',
+    this.addLabel = 'Add your own search term',
+    this.presets = _presets,
+  });
 
   final String initial;
+
+  /// Dialog title, label above the input line and the ticked list entries
+  /// (defaults are for the Wallhaven search terms).
+  final String title;
+  final String addLabel;
+  final List<String> presets;
 
   @override
   State<SubredditPickerDialog> createState() => _SubredditPickerDialogState();
@@ -55,7 +67,7 @@ class _SubredditPickerDialogState extends State<SubredditPickerDialog> {
       if (name.toLowerCase().startsWith('r/')) name = name.substring(2);
       if (name.isNotEmpty && !_contains(_selected, name)) _selected.add(name);
     }
-    _options = [..._presets];
+    _options = [...widget.presets];
     for (final s in _selected) {
       if (!_contains(_options, s)) _options.add(s);
     }
@@ -99,7 +111,7 @@ class _SubredditPickerDialogState extends State<SubredditPickerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Suchbegriffe'),
+      title: Text(widget.title),
       content: SizedBox(
         width: 900,
         height: 380,
@@ -125,7 +137,7 @@ class _SubredditPickerDialogState extends State<SubredditPickerDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Add your own search term'),
+                  Text(widget.addLabel),
                   const SizedBox(height: 8),
                   Container(
                     width: double.infinity,

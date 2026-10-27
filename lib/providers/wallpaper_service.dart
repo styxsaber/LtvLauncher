@@ -18,23 +18,33 @@
 
 import 'dart:io';
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flauncher/flauncher_channel.dart';
 import 'package:flauncher/gradients.dart';
+import 'package:flauncher/providers/reddit_rss_fetcher.dart';
 import 'package:flauncher/providers/reddit_wallpaper_fetcher.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+/// The online wallpaper sources. If both are switched on, one of them is picked at random
+/// for every change.
+enum OnlineWallpaperSource { wallhaven, reddit }
+
 class WallpaperService extends ChangeNotifier {
-  /// Reddit images are decoded at most this wide to keep memory usage low on weak TV hardware.
+  /// Online wallpaper images are decoded at most this wide to keep memory usage low on weak TV hardware.
   static const int _redditMaxDecodeWidth = 2560;
   static const Duration _redditCheckInterval = Duration(minutes: 5);
 
   final FLauncherChannel _fLauncherChannel;
   final SettingsService _settingsService;
+  // The "Reddit" names below are historic: _redditFetcher is the Wallhaven source,
+  // _redditRssFetcher is the real Reddit source. Both write into _wallpaperRedditFile.
   final RedditWallpaperFetcher _redditFetcher = RedditWallpaperFetcher();
+  final RedditRssFetcher _redditRssFetcher = RedditRssFetcher();
+  final Random _random = Random();
 
   late File _wallpaperFile;
   late File _wallpaperDayFile;
@@ -75,6 +85,28 @@ class WallpaperService extends ChangeNotifier {
   String _lastRedditSubreddits = "";
   bool _lastRedditAllowNsfw = false;
   bool _lastRedditNsfwOnly = false;
+  bool _lastRedditSourceEnabled = false;
+  String _lastRedditSourceSubreddits = "";
+
+  bool get _anyOnlineEnabled => _settingsService.redditWallpaperEnabled || _settingsService.redditSourceEnabled;
+
+  bool _isSourceEnabled(OnlineWallpaperSource source) {
+    switch (source) {
+      case OnlineWallpaperSource.wallhaven:
+        return _settingsService.redditWallpaperEnabled;
+      case OnlineWallpaperSource.reddit:
+        return _settingsService.redditSourceEnabled;
+    }
+  }
+
+  static String _sourceName(OnlineWallpaperSource source) {
+    switch (source) {
+      case OnlineWallpaperSource.wallhaven:
+        return "Wallhaven";
+      case OnlineWallpaperSource.reddit:
+        return "Reddit";
+    }
+  }
 
   void _onSettingsChanged() {
     if (!_initialized) {
@@ -92,21 +124,31 @@ class WallpaperService extends ChangeNotifier {
     final redditSubreddits = _settingsService.redditWallpaperSubreddits;
     final redditAllowNsfw = _settingsService.redditWallpaperAllowNsfw;
     final redditNsfwOnly = _settingsService.redditWallpaperNsfwOnly;
-    final redditToggled = redditEnabled != _lastRedditEnabled;
-    final redditSourceChanged = redditSubreddits != _lastRedditSubreddits ||
+    final redditSourceEnabled = _settingsService.redditSourceEnabled;
+    final redditSourceSubreddits = _settingsService.redditSourceSubreddits;
+
+    final wallhavenChanged = redditSubreddits != _lastRedditSubreddits ||
         redditAllowNsfw != _lastRedditAllowNsfw ||
         redditNsfwOnly != _lastRedditNsfwOnly;
-    if (redditToggled || redditSourceChanged) {
+    final redditChanged = redditSourceSubreddits != _lastRedditSourceSubreddits;
+    final toggled = redditEnabled != _lastRedditEnabled || redditSourceEnabled != _lastRedditSourceEnabled;
+    // A source that was just switched on, or whose settings changed while it is on, fetches right away.
+    final needsFetch = (redditEnabled && (!_lastRedditEnabled || wallhavenChanged)) ||
+        (redditSourceEnabled && (!_lastRedditSourceEnabled || redditChanged));
+
+    if (toggled || wallhavenChanged || redditChanged) {
       _lastRedditEnabled = redditEnabled;
       _lastRedditSubreddits = redditSubreddits;
       _lastRedditAllowNsfw = redditAllowNsfw;
       _lastRedditNsfwOnly = redditNsfwOnly;
+      _lastRedditSourceEnabled = redditSourceEnabled;
+      _lastRedditSourceSubreddits = redditSourceSubreddits;
       _updateRedditTimerState();
-      // Show the cached Reddit picture (or switch back) right away ...
+      // Show the cached online picture (or switch back) right away ...
       _updateWallpaper(force: true);
-      // ... and fetch a new one if the source changed or nothing is cached yet.
-      if (redditEnabled) {
-        _refreshReddit(force: redditSourceChanged);
+      // ... and fetch a new one if a source changed or nothing is cached yet.
+      if (redditEnabled || redditSourceEnabled) {
+        _refreshReddit(force: needsFetch);
       }
     }
   }
@@ -131,12 +173,14 @@ class WallpaperService extends ChangeNotifier {
     _lastRedditSubreddits = _settingsService.redditWallpaperSubreddits;
     _lastRedditAllowNsfw = _settingsService.redditWallpaperAllowNsfw;
     _lastRedditNsfwOnly = _settingsService.redditWallpaperNsfwOnly;
+    _lastRedditSourceEnabled = _settingsService.redditSourceEnabled;
+    _lastRedditSourceSubreddits = _settingsService.redditSourceSubreddits;
     _initialized = true;
 
     await _updateWallpaper();
     _updateTimerState();
     _updateRedditTimerState();
-    if (_lastRedditEnabled) {
+    if (_lastRedditEnabled || _lastRedditSourceEnabled) {
       unawaited(_refreshReddit());
     }
   }
@@ -152,7 +196,7 @@ class WallpaperService extends ChangeNotifier {
   }
 
   void _updateRedditTimerState() {
-    final enabled = _settingsService.redditWallpaperEnabled;
+    final enabled = _anyOnlineEnabled;
     if (enabled && (_redditTimer == null || !_redditTimer!.isActive)) {
       _redditTimer = Timer.periodic(_redditCheckInterval, (_) => _refreshReddit());
     } else if (!enabled && _redditTimer != null) {
@@ -169,7 +213,7 @@ class WallpaperService extends ChangeNotifier {
 
     ImageProvider? newWallpaper;
 
-    if (_settingsService.redditWallpaperEnabled && await _wallpaperRedditFile.exists()) {
+    if (_anyOnlineEnabled && await _wallpaperRedditFile.exists()) {
       // Keep one provider instance so periodic updates don't needlessly rebuild the UI.
       newWallpaper = _redditProvider ??= ResizeImage.resizeIfNeeded(
         _redditMaxDecodeWidth,
@@ -198,9 +242,10 @@ class WallpaperService extends ChangeNotifier {
     }
   }
 
-  /// Downloads a new random picture from the configured subreddits right now.
+  /// Downloads a new random picture right now. With [only] the picture comes from that
+  /// source, otherwise from a random one of the switched-on sources.
   /// Returns true on success; on failure [redditLastError] describes what went wrong.
-  Future<bool> refreshRedditWallpaperNow() => _refreshReddit(force: true);
+  Future<bool> refreshRedditWallpaperNow({OnlineWallpaperSource? only}) => _refreshReddit(force: true, only: only);
 
   Future<bool> _isRedditRefreshDue() async {
     if (!await _wallpaperRedditFile.exists()) {
@@ -210,8 +255,30 @@ class WallpaperService extends ChangeNotifier {
     return age >= Duration(minutes: _settingsService.redditWallpaperIntervalMinutes);
   }
 
-  Future<bool> _refreshReddit({bool force = false}) async {
-    if (!_initialized || !_settingsService.redditWallpaperEnabled || _redditRefreshing) {
+  Future<RedditImageCandidate> _fetchFrom(OnlineWallpaperSource source) {
+    switch (source) {
+      case OnlineWallpaperSource.wallhaven:
+        return _redditFetcher.fetchRandomWallpaper(
+          subreddits: _settingsService.redditWallpaperSubreddits,
+          target: _wallpaperRedditFile,
+          allowNsfw: _settingsService.redditWallpaperAllowNsfw,
+          nsfwOnly: _settingsService.redditWallpaperNsfwOnly,
+          excludeId: _lastRedditPostId,
+        );
+      case OnlineWallpaperSource.reddit:
+        return _redditRssFetcher.fetchRandomWallpaper(
+          subreddits: _settingsService.redditSourceSubreddits,
+          target: _wallpaperRedditFile,
+          excludeId: _lastRedditPostId,
+        );
+    }
+  }
+
+  Future<bool> _refreshReddit({bool force = false, OnlineWallpaperSource? only}) async {
+    if (!_initialized || _redditRefreshing) {
+      return false;
+    }
+    if (only != null ? !_isSourceEnabled(only) : !_anyOnlineEnabled) {
       return false;
     }
     if (!force && !await _isRedditRefreshDue()) {
@@ -222,30 +289,40 @@ class WallpaperService extends ChangeNotifier {
     _redditLastError = null;
     notifyListeners();
 
-    var success = false;
-    try {
-      final picked = await _redditFetcher.fetchRandomWallpaper(
-        subreddits: _settingsService.redditWallpaperSubreddits,
-        target: _wallpaperRedditFile,
-        allowNsfw: _settingsService.redditWallpaperAllowNsfw,
-        nsfwOnly: _settingsService.redditWallpaperNsfwOnly,
-        excludeId: _lastRedditPostId,
-      );
-      _lastRedditPostId = picked.id;
+    // Random order; if the first source fails the next one is tried.
+    final sources = only != null
+        ? <OnlineWallpaperSource>[only]
+        : OnlineWallpaperSource.values.where(_isSourceEnabled).toList();
+    sources.shuffle(_random);
 
-      // Evict the previous decode from the image cache and use a fresh provider.
-      await _redditProvider?.evict();
-      _redditProvider = null;
-      _version++;
-      success = true;
-    } on RedditWallpaperException catch (e) {
-      _redditLastError = e.message;
-    } on TimeoutException {
-      _redditLastError = "timeout";
-    } on IOException catch (e) {
-      _redditLastError = e.toString();
-    } on FormatException {
-      _redditLastError = "invalid response from Reddit";
+    var success = false;
+    final errors = <String>[];
+    try {
+      for (final source in sources) {
+        try {
+          final picked = await _fetchFrom(source);
+          _lastRedditPostId = picked.id;
+          success = true;
+          break;
+        } on RedditWallpaperException catch (e) {
+          errors.add("${_sourceName(source)}: ${e.message}");
+        } on TimeoutException {
+          errors.add("${_sourceName(source)}: timeout");
+        } on IOException catch (e) {
+          errors.add("${_sourceName(source)}: $e");
+        } on FormatException {
+          errors.add("${_sourceName(source)}: invalid response");
+        }
+      }
+
+      if (success) {
+        // Evict the previous decode from the image cache and use a fresh provider.
+        await _redditProvider?.evict();
+        _redditProvider = null;
+        _version++;
+      } else {
+        _redditLastError = errors.join(" | ");
+      }
     } finally {
       _redditRefreshing = false;
     }
@@ -282,8 +359,9 @@ class WallpaperService extends ChangeNotifier {
       // Evict from cache to ensure UI updates
       await FileImage(targetFile).evict();
 
-      // A manually picked picture replaces the Reddit wallpaper.
+      // A manually picked picture replaces the online wallpapers.
       await _settingsService.setRedditWallpaperEnabled(false);
+      await _settingsService.setRedditSourceEnabled(false);
 
       _version++;
       await _updateWallpaper(force: true);
@@ -295,8 +373,9 @@ class WallpaperService extends ChangeNotifier {
       await _wallpaperFile.delete();
     }
 
-    // Choosing a gradient replaces the Reddit wallpaper.
+    // Choosing a gradient replaces the online wallpapers.
     await _settingsService.setRedditWallpaperEnabled(false);
+    await _settingsService.setRedditSourceEnabled(false);
 
     _settingsService.setGradientUuid(fLauncherGradient.uuid);
     notifyListeners();

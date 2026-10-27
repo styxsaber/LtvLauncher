@@ -25,6 +25,7 @@ import 'package:flauncher/widgets/settings/settings_panel_page.dart';
 import 'package:flauncher/widgets/settings/status_bar_panel_page.dart';
 import 'package:flauncher/widgets/settings/wallpaper_panel_page.dart';
 import 'package:flauncher/widgets/settings/reddit_wallpaper_panel_page.dart';
+import 'package:flauncher/widgets/settings/reddit_source_panel_page.dart';
 import 'package:flauncher/widgets/settings/data_usage_period_page.dart';
 import 'package:flauncher/widgets/settings/back_button_action_page.dart';
 import 'package:flauncher/widgets/settings/date_time_format_page.dart';
@@ -94,6 +95,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
                       return _FastPageRoute(builder: (_) => WallpaperPanelPage());
                     case RedditWallpaperPanelPage.routeName:
                       return _FastPageRoute(builder: (_) => const RedditWallpaperPanelPage());
+                    case RedditSourcePanelPage.routeName:
+                      return _FastPageRoute(builder: (_) => const RedditSourcePanelPage());
                     case StatusBarPanelPage.routeName:
                       return _FastPageRoute(builder: (_) => StatusBarPanelPage());
                     case GradientPanelPage.routeName:
