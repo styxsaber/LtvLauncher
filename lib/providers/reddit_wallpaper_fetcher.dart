@@ -64,6 +64,7 @@ class RedditWallpaperFetcher {
   static const Duration _timeout = Duration(seconds: 20);
 
   static final RegExp _subredditPattern = RegExp(r'^[A-Za-z0-9_]{2,21}$');
+  static final RegExp _searchTermPattern = RegExp(r'^[A-Za-z0-9_:\-]{2,40}$');
   static final RegExp _imagePath = RegExp(r'\.(jpe?g|png|webp)$', caseSensitive: false);
   static final RegExp _subredditPrefix = RegExp(r'^/?r/', caseSensitive: false);
 
@@ -83,6 +84,19 @@ class RedditWallpaperFetcher {
     return result;
   }
 
+  /// Splits Wallhaven search terms like "rezero, re:zero space" into single terms.
+  /// Unlike subreddit names they may also contain ":" and "-".
+  static List<String> parseSearchTerms(String input) {
+    final result = <String>[];
+    for (final raw in input.split(RegExp(r'[\s,+;]+'))) {
+      final name = raw.trim();
+      if (_searchTermPattern.hasMatch(name) && !result.contains(name)) {
+        result.add(name);
+      }
+    }
+    return result;
+  }
+
   /// Downloads a random suitable image into [target] and returns what was picked.
   /// Throws [RedditWallpaperException] if nothing usable could be fetched.
   Future<RedditImageCandidate> fetchRandomWallpaper({
@@ -92,7 +106,7 @@ class RedditWallpaperFetcher {
     bool nsfwOnly = false,
     String? excludeId,
   }) async {
-    final subs = parseSubreddits(subreddits);
+    final subs = parseSearchTerms(subreddits);
     if (subs.isEmpty) {
       throw const RedditWallpaperException('no valid search term');
     }
@@ -132,20 +146,33 @@ class RedditWallpaperFetcher {
       throw const RedditWallpaperException('NSFW needs a Wallhaven API key (see _apiKey in the fetcher)');
     }
     final term = subreddits[_random.nextInt(subreddits.length)];
-    final uri = Uri.https('wallhaven.cc', '/api/v1/search', {
-      'q': term,
-      'categories': '100',
-      'purity': nsfwOnly ? '001' : (allowNsfw ? '101' : '100'),
-      'sorting': 'toplist',
-      'topRange': '1M',
-      'atleast': '1920x1080',
-      'ratios': 'landscape',
-    });
+    final purity = nsfwOnly ? '001' : (allowNsfw ? '101' : '100');
 
-    final dynamic json = _decode(await _getString(uri));
-    final dynamic data = json is Map ? json['data'] : null;
-    if (data is! List) {
-      throw const RedditWallpaperException('unexpected response from server');
+    // "110" = General + Anime. Several tries from strict to loose, so that
+    // narrow terms (e.g. a single anime title) still find something.
+    final tries = <Map<String, String>>[
+      {'sorting': 'toplist', 'topRange': '1M', 'atleast': '1920x1080', 'ratios': 'landscape'},
+      {'sorting': 'relevance', 'atleast': '1920x1080', 'ratios': 'landscape'},
+      {'sorting': 'relevance', 'atleast': '1280x720'},
+    ];
+
+    List<dynamic> data = const [];
+    for (final extra in tries) {
+      final uri = Uri.https('wallhaven.cc', '/api/v1/search', {
+        'q': term,
+        'categories': '110',
+        'purity': purity,
+        ...extra,
+      });
+      final dynamic json = _decode(await _getString(uri));
+      final dynamic found = json is Map ? json['data'] : null;
+      if (found is! List) {
+        throw const RedditWallpaperException('unexpected response from server');
+      }
+      if (found.isNotEmpty) {
+        data = found;
+        break;
+      }
     }
 
     final candidates = <RedditImageCandidate>[];

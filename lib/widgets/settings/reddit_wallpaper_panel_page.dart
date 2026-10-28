@@ -122,8 +122,8 @@ class RedditWallpaperPanelPage extends StatelessWidget {
 
   Future<void> _setEnabled(
       BuildContext context, SettingsService settings, bool value, AppLocalizations localizations) async {
-    if (value && RedditWallpaperFetcher.parseSubreddits(settings.redditWallpaperSubreddits).isEmpty) {
-      _showMessage(context, localizations.redditWallpaperNoSubreddits);
+    if (value && RedditWallpaperFetcher.parseSearchTerms(settings.redditWallpaperSubreddits).isEmpty) {
+      _showMessage(context, _noTermsText(context));
       return;
     }
     await settings.setRedditWallpaperEnabled(value);
@@ -137,10 +137,10 @@ class RedditWallpaperPanelPage extends StatelessWidget {
     if (result == null) {
       return;
     }
-    final subreddits = RedditWallpaperFetcher.parseSubreddits(result);
+    final subreddits = RedditWallpaperFetcher.parseSearchTerms(result);
     if (subreddits.isEmpty) {
       if (context.mounted) {
-        _showMessage(context, localizations.redditWallpaperNoSubreddits);
+        _showMessage(context, _noTermsText(context));
       }
       return;
     }
@@ -159,6 +159,11 @@ class RedditWallpaperPanelPage extends StatelessWidget {
     if (!success && context.mounted && wallpaperService.redditLastError != null) {
       _showMessage(context, "${localizations.redditWallpaperError} (${wallpaperService.redditLastError})");
     }
+  }
+
+  static String _noTermsText(BuildContext context) {
+    final de = Localizations.localeOf(context).languageCode == 'de';
+    return de ? "Bitte mindestens einen Suchbegriff eingeben" : "Please enter at least one search term";
   }
 
   void _showMessage(BuildContext context, String message) {

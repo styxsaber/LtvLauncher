@@ -100,9 +100,19 @@ class RedditRssFetcher {
     throw RedditWallpaperException('download failed: $lastError');
   }
 
+  /// Monthly top first; if that has no usable pictures (small subreddits), the year, then all time.
   Future<List<RedditImageCandidate>> _listCandidates(String sub) async {
-    final rssUri = Uri.https('www.reddit.com', '/r/$sub/top.rss', {'t': 'month', 'limit': '50'});
-    final jsonUri = Uri.https('www.reddit.com', '/r/$sub/top.json', {'t': 'month', 'limit': '50', 'raw_json': '1'});
+    var list = const <RedditImageCandidate>[];
+    for (final period in const ['month', 'year', 'all']) {
+      list = await _listCandidatesFor(sub, period);
+      if (list.isNotEmpty) break;
+    }
+    return list;
+  }
+
+  Future<List<RedditImageCandidate>> _listCandidatesFor(String sub, String period) async {
+    final rssUri = Uri.https('www.reddit.com', '/r/$sub/top.rss', {'t': period, 'limit': '50'});
+    final jsonUri = Uri.https('www.reddit.com', '/r/$sub/top.json', {'t': period, 'limit': '50', 'raw_json': '1'});
 
     final steps = <Future<List<RedditImageCandidate>> Function()>[
       () => _fromFeed(rssUri, _feedAgent),
@@ -111,9 +121,11 @@ class RedditRssFetcher {
     ];
 
     final errors = <String>[];
+    var reachable = false;
     for (final step in steps) {
       try {
         final list = await step();
+        reachable = true;
         if (list.isNotEmpty) {
           return list;
         }
@@ -128,6 +140,8 @@ class RedditRssFetcher {
         errors.add('invalid data');
       }
     }
+    // Reddit answered but had no pictures in this period: let the caller try a longer one.
+    if (reachable) return const <RedditImageCandidate>[];
     throw RedditWallpaperException(errors.join(' | '));
   }
 

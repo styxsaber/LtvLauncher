@@ -30,7 +30,7 @@ const _keyRows = <String>[
   '1234567890',
   'qwertzuiop',
   'asdfghjkl',
-  'yxcvbnm_',
+  'yxcvbnm_-:',
 ];
 
 class SubredditPickerDialog extends StatefulWidget {
@@ -40,6 +40,7 @@ class SubredditPickerDialog extends StatefulWidget {
     this.title = 'Suchbegriffe',
     this.addLabel = 'Add your own search term',
     this.presets = _presets,
+    this.prefix = '',
   });
 
   final String initial;
@@ -49,6 +50,10 @@ class SubredditPickerDialog extends StatefulWidget {
   final String title;
   final String addLabel;
   final List<String> presets;
+
+  /// Fixed text shown in front of every entry and the input line (e.g. "r/").
+  /// It is not part of the returned value.
+  final String prefix;
 
   @override
   State<SubredditPickerDialog> createState() => _SubredditPickerDialogState();
@@ -87,7 +92,8 @@ class _SubredditPickerDialogState extends State<SubredditPickerDialog> {
   }
 
   void _addTyped() {
-    final name = _typing.trim();
+    var name = _typing.trim();
+    if (name.toLowerCase().startsWith('r/')) name = name.substring(2);
     if (name.isEmpty) return;
     setState(() {
       if (!_contains(_options, name)) _options.add(name);
@@ -96,7 +102,16 @@ class _SubredditPickerDialogState extends State<SubredditPickerDialog> {
     });
   }
 
-  Widget _key(String label, VoidCallback onPressed, {double width = 44}) {
+  /// Saves the selection. Text that was typed but not confirmed with "Add"
+  /// is taken over as well, so it does not get lost.
+  void _save() {
+    var pending = _typing.trim();
+    if (pending.toLowerCase().startsWith('r/')) pending = pending.substring(2);
+    if (pending.isNotEmpty && !_contains(_selected, pending)) _selected.add(pending);
+    Navigator.of(context).pop(_selected.join(', '));
+  }
+
+  Widget _key(String label, VoidCallback onPressed, {double width = 38}) {
     return SizedBox(
       width: width,
       height: 40,
@@ -125,7 +140,7 @@ class _SubredditPickerDialogState extends State<SubredditPickerDialog> {
                     CheckboxListTile(
                       autofocus: i == 0,
                       dense: true,
-                      title: Text(_options[i]),
+                      title: Text('${widget.prefix}${_options[i]}'),
                       value: _contains(_selected, _options[i]),
                       onChanged: (v) => _toggle(_options[i], v ?? false),
                     ),
@@ -146,7 +161,7 @@ class _SubredditPickerDialogState extends State<SubredditPickerDialog> {
                       border: Border.all(color: Colors.white38),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Text(_typing.isEmpty ? ' ' : _typing),
+                    child: Text(_typing.isEmpty && widget.prefix.isEmpty ? ' ' : '${widget.prefix}$_typing'),
                   ),
                   const SizedBox(height: 8),
                   for (final row in _keyRows)
@@ -183,7 +198,7 @@ class _SubredditPickerDialogState extends State<SubredditPickerDialog> {
           child: const Text('Cancel'),
         ),
         TextButton(
-          onPressed: () => Navigator.of(context).pop(_selected.join(', ')),
+          onPressed: _save,
           child: const Text('Save'),
         ),
       ],

@@ -71,7 +71,7 @@ class RedditSourcePanelPage extends StatelessWidget {
             trailing: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 120),
               child: Text(
-                settings.redditSourceSubreddits.replaceAll('+', ', '),
+                settings.redditSourceSubreddits.split('+').map((s) => 'r/$s').join(', '),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall,
@@ -135,6 +135,7 @@ class RedditSourcePanelPage extends StatelessWidget {
         title: localizations.redditWallpaperSubreddits,
         addLabel: de ? "Eigenes Subreddit hinzufügen" : "Add your own subreddit",
         presets: _presets,
+        prefix: 'r/',
       ),
     );
     if (result == null) {
